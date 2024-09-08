@@ -1,0 +1,22 @@
+services:
+  voting-db:
+    image: postgres:latest
+    container_name: voting-db
+    hostname: voting-db
+    environment:
+      - POSTGRES_DB=${VOTING_PG_DB}
+      - POSTGRES_USER=${VOTING_PG_USER}
+      - POSTGRES_PASSWORD=${VOTING_PG_PASSWORD}
+      - POSTGRES_ROOT_PASSWORD=${VOTING_PG_PASSWORD_ROOT}
+    volumes:
+      - voting-db-data:/var/lib/postgresql/data
+    ports:
+      - ${VOTING_PG_PORT}:5432
+    networks:
+      - net-task-voting
+
+networks:
+  net-task-voting:
+
+volumes:
+  voting-db-data:

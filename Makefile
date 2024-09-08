@@ -40,5 +40,14 @@ dev-env-clear: dev-env-down
 	# Remove containers and volumes
 	${DOCKER_COMPOSE_RUN} down -v
 
+# Migration targets
+.PHONY: migrate-voting-up
+migrate-voting-up:
+	${MIGRATE_BIN} -dir=$(MIGRATIONS_VOTING_APP) postgres $(VOTING_PG_DSN) up
+
+.PHONY: migrate-voting-reset
+migrate-voting-reset:
+	${MIGRATE_BIN} -dir=$(MIGRATIONS_VOTING_APP) postgres $(VOTING_PG_DSN) reset
+
 run_application:
 	go run main.go -c config.toml user

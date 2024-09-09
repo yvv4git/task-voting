@@ -2,17 +2,30 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yvv4git/task-voting/internal/infrastructure"
+
+	sq "github.com/Masterminds/squirrel"
+)
+
+const (
+	tbVoting           = "voting"
+	tbVotingInvariance = "voting_invariance"
 )
 
 type Voting struct {
-	// db
+	db *pgxpool.Pool
 }
 
-func NewVoting() *Voting {
-	return &Voting{}
+func NewVoting(db *pgxpool.Pool) *Voting {
+	return &Voting{
+		db: db,
+	}
 }
 
 type (
@@ -101,15 +114,81 @@ type (
 	}
 )
 
-func (v *Voting) CreateVoting(_ context.Context, p *CreateVotingParams) (*CreateVotingResult, error) {
-	// TODO: implement
-	id, err := uuid.NewUUID()
+type ResultID struct {
+	ID uuid.UUID `db:"id"`
+}
+
+func (v *Voting) CreateVoting(ctx context.Context, p *CreateVotingParams) (*CreateVotingResult, error) {
+	tx, err := v.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	resultID, err := v.createVoting(ctx, tx, p)
+	if err != nil {
+		return nil, fmt.Errorf("create voting: %w", err)
+	}
+
+	if err = v.addInvariance(ctx, tx, addInvarianceParams{
+		votingID:   resultID.ID,
+		invariance: p.Invariance,
+	}); err != nil {
+		return nil, fmt.Errorf("add invariance: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return &CreateVotingResult{
+		ID: resultID.ID,
+	}, nil
+}
+
+func (v *Voting) createVoting(ctx context.Context, tx pgx.Tx, p *CreateVotingParams) (*ResultID, error) {
+	b := sq.Insert(tbVoting).
+		Columns("name", "description", "started_at", "ended_at").
+		Values(p.Name, p.Description, p.StartAt, p.EndAt).
+		Suffix("RETURNING id")
+
+	stmt, args, err := b.PlaceholderFormat(sq.Dollar).ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build statement: %w", err)
+	}
+
+	resultIDPtr, err := infrastructure.FetchRow[ResultID](ctx, tx, stmt, args...)
 	if err != nil {
 		return nil, err
 	}
-	return &CreateVotingResult{
-		ID: id,
-	}, nil
+
+	return resultIDPtr, nil
+}
+
+type addInvarianceParams struct {
+	votingID   uuid.UUID
+	invariance []string
+}
+
+func (v *Voting) addInvariance(ctx context.Context, tx pgx.Tx, p addInvarianceParams) error {
+	b := sq.Insert(tbVotingInvariance).
+		Columns("voting_id", "name")
+
+	for _, item := range p.invariance {
+		b = b.Values(p.votingID, item)
+	}
+
+	stmt, args, err := b.PlaceholderFormat(sq.Dollar).ToSql()
+	if err != nil {
+		return fmt.Errorf("build statement: %w", err)
+	}
+
+	if err = infrastructure.Execute(ctx, tx, stmt, args...); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type UpdateVotingParams struct {

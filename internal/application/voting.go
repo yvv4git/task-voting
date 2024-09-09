@@ -35,15 +35,23 @@ func (v *Voting) start(ctx context.Context) error {
 	v.log.Info("Starting VotingApplication")
 	defer v.log.Info("Shutting down VotingApplication")
 
-	votingRepo := repository.NewVoting()
+	// Init db
+	db, err := infrastructure.NewPostgresDB(ctx, v.cfg.VotingApp.DataBase)
+	if err != nil {
+		return fmt.Errorf("init db connection: %w", err)
+	}
+
+	// Init repo & service
+	votingRepo := repository.NewVoting(db)
 	votingService := service.NewVoting(votingRepo)
 
+	// Init web interface
 	webConfig := v.cfg.VotingApp.WebAPI
 	r := gin.Default()
 	webHandler := web.NewVotingHandler(votingService)
 	webHandler.RegisterHandlers(r)
 	webSrv := infrastructure.NewWebServer(v.log, r, fmt.Sprintf("%s:%d", webConfig.Host, webConfig.Port))
-	if err := webSrv.Run(ctx); err != nil {
+	if err = webSrv.Run(ctx); err != nil {
 		return err
 	}
 

@@ -2,10 +2,9 @@
 -- +goose StatementBegin
 CREATE TABLE voting_invariance
 (
-    id          SERIAL PRIMARY KEY,
-    voting_id   INT NOT NULL REFERENCES voting(id) ON DELETE CASCADE,
-    name        VARCHAR(255) NOT NULL,
-    description TEXT
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    voting_id   UUID NOT NULL REFERENCES voting(id) ON DELETE CASCADE,
+    name        VARCHAR(255) NOT NULL
 );
 -- +goose StatementEnd
 

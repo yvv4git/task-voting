@@ -2,12 +2,14 @@
 -- +goose StatementBegin
 CREATE TABLE voting
 (
-    id         SERIAL PRIMARY KEY,
-    name       VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    ended_at   TIMESTAMP,
-    deleted_at TIMESTAMP
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP,
+    started_at  TIMESTAMP,
+    ended_at    TIMESTAMP,
+    deleted_at  TIMESTAMP
 );
 -- +goose StatementEnd
 

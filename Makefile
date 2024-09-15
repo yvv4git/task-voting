@@ -29,7 +29,7 @@ DOCKER_COMPOSE_RUN?=docker compose -f ${DOCKER_COMPOSE_DEV_ENV} --project-name=t
 # Dev environment
 .PHONY: dev-env-up
 dev-env-up:
-	${DOCKER_COMPOSE_RUN} up -d ${DOCKER_COMPOSE_TEST_ENV_SERVICES}
+	${DOCKER_COMPOSE_RUN} up -d ${DOCKER_COMPOSE_DEV_ENV_SERVICES}
 
 .PHONY: dev-env-down
 dev-env-down:
@@ -51,3 +51,6 @@ migrate-voting-reset:
 
 run_application:
 	go run main.go -c config.toml user
+
+gen_auth_base:
+	go run main.go auth -l user1 -p secret1

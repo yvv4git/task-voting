@@ -26,6 +26,10 @@ go.work.sum
 
 # IDE
 .idea
+.vcode/*
 
 # Config
 config.toml
+.vscode/launch.json
+.vscode/settings.json
+scripts/research.session.sql

@@ -44,11 +44,12 @@ func (v *Voting) start(ctx context.Context) error {
 	// Init repo & service
 	votingRepo := repository.NewVoting(db)
 	votingService := service.NewVoting(votingRepo)
+	authService := infrastructure.NewAuthStub()
 
 	// Init web interface
 	webConfig := v.cfg.VotingApp.WebAPI
 	r := gin.Default()
-	webHandler := web.NewVotingHandler(votingService)
+	webHandler := web.NewVotingHandler(votingService, authService)
 	webHandler.RegisterHandlers(r)
 	webSrv := infrastructure.NewWebServer(v.log, r, fmt.Sprintf("%s:%d", webConfig.Host, webConfig.Port))
 	if err = webSrv.Run(ctx); err != nil {

@@ -72,5 +72,7 @@ func Execute(ctx context.Context, q Queryer, sql string, args ...any) error {
 		return ErrObjectNotFound
 	}
 
+	rows.Next()
+
 	return nil
 }

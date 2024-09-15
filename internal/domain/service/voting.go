@@ -47,6 +47,7 @@ func (v *Voting) List(ctx context.Context, r *web.ListVotingRequest) (*web.ListV
 			var dstScoreItems = make([]web.InvarianceScore, 0, len(item.Invariance))
 			for _, invariance := range item.Invariance {
 				var dstInvariance web.InvarianceScore
+				dstInvariance.ID = invariance.ID
 				dstInvariance.Name = invariance.Name
 				dstInvariance.Score = invariance.Score
 				dstScoreItems = append(dstScoreItems, dstInvariance)
@@ -81,6 +82,7 @@ func (v *Voting) CreateVoting(ctx context.Context, r *web.CreateVotingRequest) (
 
 func (v *Voting) UpdateVoting(ctx context.Context, r *web.UpdateVotingRequest) error {
 	return v.repo.UpdateVoting(ctx, &repository.UpdateVotingParams{
+		ID:          r.ID,
 		Name:        r.Name,
 		Description: r.Description,
 		StartAt:     r.StartAt,
@@ -98,5 +100,6 @@ func (v *Voting) DeleteVoting(ctx context.Context, r *web.DeleteVotingRequest) e
 func (v *Voting) MakeChoice(ctx context.Context, r *web.MakeChoiceRequest) error {
 	return v.repo.MakeChoice(ctx, &repository.MakeChoiceParams{
 		InvarianceID: r.InvarianceID,
+		UserID:       r.UserID,
 	})
 }

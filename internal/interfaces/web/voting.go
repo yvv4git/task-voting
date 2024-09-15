@@ -9,7 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/yvv4git/task-voting/internal/infrastructure"
 )
+
+type contextKey string
+
+const userIDKey contextKey = "userID"
 
 type VotingService interface {
 	List(ctx context.Context, r *ListVotingRequest) (*ListVotingResponse, error)
@@ -19,22 +24,63 @@ type VotingService interface {
 	MakeChoice(ctx context.Context, r *MakeChoiceRequest) error
 }
 
-type VotingHandler struct {
-	votingService VotingService
+type AuthService interface {
+	CheckLoginPassword(ctx context.Context, login string, password string) error
+	UserIDByLoginPassword(ctx context.Context, username, password string) (uuid.UUID, error)
 }
 
-func NewVotingHandler(votingService VotingService) *VotingHandler {
+type VotingHandler struct {
+	votingService VotingService
+	authService   AuthService
+}
+
+func NewVotingHandler(votingService VotingService, authService AuthService) *VotingHandler {
 	return &VotingHandler{
 		votingService: votingService,
+		authService:   authService,
 	}
 }
 
 func (v *VotingHandler) RegisterHandlers(router *gin.Engine) {
-	router.GET("/voting", v.ListVoting)
-	router.POST("/voting", v.CreateVoting)
-	router.PUT("/voting/:id", v.UpdateVoting)
-	router.DELETE("/voting/:id", v.DeleteVoting)
-	router.PUT("/voting/:id/choice", v.MakeChoice)
+	authMiddleware := func(c *gin.Context) {
+		login, password, err := infrastructure.ExtractBasicAuthValid(c)
+		if err != nil {
+			c.JSON(401, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+
+		fmt.Printf("login: %s, password: %s\n", login, password)
+		// Check login and password with auth service
+		if err := v.authService.CheckLoginPassword(c.Request.Context(), login, password); err != nil {
+			c.JSON(401, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+
+		// Request userID from auth service
+		userID, err := v.authService.UserIDByLoginPassword(c.Request.Context(), login, password)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Store the userID in the context
+		ctx := context.WithValue(c.Request.Context(), userIDKey, userID)
+		c.Request = c.Request.WithContext(ctx)
+
+		c.Next()
+	}
+
+	votingGroup := router.Group("/voting")
+	votingGroup.Use(authMiddleware)
+	{
+		votingGroup.GET("", v.ListVoting)
+		votingGroup.POST("", v.CreateVoting)
+		votingGroup.PUT("/:id", v.UpdateVoting)
+		votingGroup.DELETE("/:id", v.DeleteVoting)
+		votingGroup.POST("/choice/:id", v.MakeChoice)
+	}
 }
 
 type (
@@ -44,8 +90,9 @@ type (
 	}
 
 	InvarianceScore struct {
-		Name  string
-		Score int64
+		ID    uuid.UUID `json:"id"`
+		Name  string    `json:"name"`
+		Score int64     `json:"score"`
 	}
 
 	VotingItem struct {
@@ -125,11 +172,12 @@ func (v *VotingHandler) CreateVoting(c *gin.Context) {
 }
 
 type UpdateVotingRequest struct {
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	StartAt     time.Time `json:"startAt"`
-	EndAt       time.Time `json:"endAt"`
-	Invariance  []string  `json:"invariance"`
+	ID          uuid.UUID  `json:"id"`
+	Name        *string    `json:"name"`
+	Description *string    `json:"description"`
+	StartAt     *time.Time `json:"startAt"`
+	EndAt       *time.Time `json:"endAt"`
+	Invariance  []string   `json:"invariance"`
 }
 
 func (v *VotingHandler) UpdateVoting(c *gin.Context) {
@@ -139,7 +187,6 @@ func (v *VotingHandler) UpdateVoting(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	fmt.Println("id: ", id)
 
 	var request UpdateVotingRequest
 	if err = c.ShouldBindJSON(&request); err != nil {
@@ -148,6 +195,7 @@ func (v *VotingHandler) UpdateVoting(c *gin.Context) {
 	}
 
 	if err = v.votingService.UpdateVoting(c.Request.Context(), &UpdateVotingRequest{
+		ID:          id,
 		Name:        request.Name,
 		Description: request.Description,
 		StartAt:     request.StartAt,
@@ -172,7 +220,6 @@ func (v *VotingHandler) DeleteVoting(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	fmt.Println("id: ", id)
 
 	if err = v.votingService.DeleteVoting(c.Request.Context(), &DeleteVotingRequest{
 		ID: id,
@@ -185,28 +232,33 @@ func (v *VotingHandler) DeleteVoting(c *gin.Context) {
 }
 
 type MakeChoiceRequest struct {
-	InvarianceID uuid.UUID `json:"invarianceId"`
+	InvarianceID uuid.UUID
+	UserID       uuid.UUID
 }
 
 func (v *VotingHandler) MakeChoice(c *gin.Context) {
 	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	invarianceID, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid invariance id"})
 		return
 	}
-	fmt.Println("id: ", id)
 
-	var request MakeChoiceRequest
-	if err = c.ShouldBindJSON(&request); err != nil {
+	// Extract user id from context
+	ctx := c.Request.Context()
+	userID, ok := ctx.Value(userIDKey).(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	if err = v.votingService.MakeChoice(c.Request.Context(), &MakeChoiceRequest{
+		InvarianceID: invarianceID,
+		UserID:       userID,
+	}); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err = v.votingService.MakeChoice(c.Request.Context(), &request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "choice made"})
+	c.JSON(http.StatusOK, gin.H{"message": "successfully voted"})
 }

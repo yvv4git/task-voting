@@ -4,6 +4,8 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"log/slog"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/yvv4git/task-voting/internal/application"
@@ -13,26 +15,23 @@ import (
 // votingCmd represents the voting command
 var votingCmd = &cobra.Command{
 	Use:   "voting",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Execute the application startup sequence",
+	Long: `This command starts the voting service, initializing necessary components and beginning the application's startup sequence. 
+	The service allows users to participate in voting processes, creating and managing voting sessions, casting votes, and retrieving results. 
+	By executing this command, the application sets up the environment, establishes database connections, and initializes the voting service, ensuring its proper functioning.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		log := infrastructure.NewDefaultLogger()
 
 		var config infrastructure.Config
 		err := viper.Unmarshal(&config)
 		if err != nil {
-			log.Error("unmarshalling config", err)
+			log.Error("unmarshalling config", slog.Any("error", err))
 			return
 		}
 
 		appVoting := application.NewVoting(log, config)
 		if err := appVoting.Start(); err != nil {
-			log.Error("start application", err)
+			log.Error("failed to start application", slog.Any("error", err))
 		}
 	},
 }

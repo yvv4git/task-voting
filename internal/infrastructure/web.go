@@ -32,7 +32,7 @@ func (w *GinServerWrapper) Run(ctx context.Context) error {
 		ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second) // TODO: fix hardcode
 		defer cancel()
 		if err := w.server.Shutdown(ctxShutdown); err != nil {
-			w.log.Error("server shutdown", err)
+			w.log.Error("server shutdown", slog.Any("error", err))
 		}
 	}()
 

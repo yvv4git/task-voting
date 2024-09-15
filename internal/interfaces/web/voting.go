@@ -2,13 +2,13 @@ package web
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/yvv4git/task-voting/internal/infrastructure"
 )
 
@@ -29,15 +29,21 @@ type AuthService interface {
 	UserIDByLoginPassword(ctx context.Context, username, password string) (uuid.UUID, error)
 }
 
+type SubscriptionProcessor interface {
+	AddClient(client infrastructure.ClientConn)
+}
+
 type VotingHandler struct {
 	votingService VotingService
 	authService   AuthService
+	subscription  SubscriptionProcessor
 }
 
-func NewVotingHandler(votingService VotingService, authService AuthService) *VotingHandler {
+func NewVotingHandler(votingService VotingService, authService AuthService, subscription SubscriptionProcessor) *VotingHandler {
 	return &VotingHandler{
 		votingService: votingService,
 		authService:   authService,
+		subscription:  subscription,
 	}
 }
 
@@ -50,7 +56,6 @@ func (v *VotingHandler) RegisterHandlers(router *gin.Engine) {
 			return
 		}
 
-		fmt.Printf("login: %s, password: %s\n", login, password)
 		// Check login and password with auth service
 		if err := v.authService.CheckLoginPassword(c.Request.Context(), login, password); err != nil {
 			c.JSON(401, gin.H{"error": "Unauthorized"})
@@ -80,6 +85,7 @@ func (v *VotingHandler) RegisterHandlers(router *gin.Engine) {
 		votingGroup.PUT("/:id", v.UpdateVoting)
 		votingGroup.DELETE("/:id", v.DeleteVoting)
 		votingGroup.POST("/choice/:id", v.MakeChoice)
+		votingGroup.GET("/subscribe", v.Subscribe)
 	}
 }
 
@@ -261,4 +267,20 @@ func (v *VotingHandler) MakeChoice(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "successfully voted"})
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func (v *VotingHandler) Subscribe(c *gin.Context) {
+	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upgrade to websocket"})
+		return
+	}
+
+	v.subscription.AddClient(ws)
 }

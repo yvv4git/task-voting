@@ -41,15 +41,18 @@ func (v *Voting) start(ctx context.Context) error {
 		return fmt.Errorf("init db connection: %w", err)
 	}
 
+	// Init subscription
+	subscription := infrastructure.NewSubscription(v.log)
+
 	// Init repo & service
 	votingRepo := repository.NewVoting(db)
-	votingService := service.NewVoting(votingRepo)
+	votingService := service.NewVoting(v.log, votingRepo, subscription)
 	authService := infrastructure.NewAuthStub()
 
 	// Init web interface
 	webConfig := v.cfg.VotingApp.WebAPI
 	r := gin.Default()
-	webHandler := web.NewVotingHandler(votingService, authService)
+	webHandler := web.NewVotingHandler(votingService, authService, subscription)
 	webHandler.RegisterHandlers(r)
 	webSrv := infrastructure.NewWebServer(v.log, r, fmt.Sprintf("%s:%d", webConfig.Host, webConfig.Port))
 	if err = webSrv.Run(ctx); err != nil {

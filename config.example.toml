@@ -4,11 +4,11 @@
 dbname = "voting_db"
 host = "localhost"
 port = 5432
-username = "voting_user"
+username = "user"
 password = "secret"
 
-[web_api]
-host = "localhost"
+[voting_service.webapi]
+host = "0.0.0.0"
 port = 8080
 read_timeout = 10
 shutdown_timeout = 5

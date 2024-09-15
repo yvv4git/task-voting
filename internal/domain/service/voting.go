@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 
 	"github.com/yvv4git/task-voting/internal/domain/repository"
 	"github.com/yvv4git/task-voting/internal/interfaces/web"
@@ -15,13 +17,21 @@ type VotingRepository interface {
 	MakeChoice(context.Context, *repository.MakeChoiceParams) error
 }
 
-type Voting struct {
-	repo VotingRepository
+type SubscriptionProcessor interface {
+	Broadcast(message []byte)
 }
 
-func NewVoting(repo VotingRepository) *Voting {
+type Voting struct {
+	logger       *slog.Logger
+	repo         VotingRepository
+	subscription SubscriptionProcessor
+}
+
+func NewVoting(logger *slog.Logger, repo VotingRepository, subscription SubscriptionProcessor) *Voting {
 	return &Voting{
-		repo: repo,
+		logger:       logger,
+		repo:         repo,
+		subscription: subscription,
 	}
 }
 
@@ -98,6 +108,29 @@ func (v *Voting) DeleteVoting(ctx context.Context, r *web.DeleteVotingRequest) e
 }
 
 func (v *Voting) MakeChoice(ctx context.Context, r *web.MakeChoiceRequest) error {
+	const (
+		limit  = 100
+		offset = 0
+	)
+	defer func() {
+		listVoting, err := v.repo.List(ctx, &repository.ListVotingRequest{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			// TODO: log
+			return
+		}
+
+		payload, err := json.Marshal(listVoting)
+		if err != nil {
+			// TODO: log
+			return
+		}
+
+		v.subscription.Broadcast(payload)
+	}()
+
 	return v.repo.MakeChoice(ctx, &repository.MakeChoiceParams{
 		InvarianceID: r.InvarianceID,
 		UserID:       r.UserID,

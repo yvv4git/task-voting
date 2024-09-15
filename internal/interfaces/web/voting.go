@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -57,7 +56,6 @@ func (v *VotingHandler) RegisterHandlers(router *gin.Engine) {
 			return
 		}
 
-		fmt.Printf("login: %s, password: %s\n", login, password)
 		// Check login and password with auth service
 		if err := v.authService.CheckLoginPassword(c.Request.Context(), login, password); err != nil {
 			c.JSON(401, gin.H{"error": "Unauthorized"})

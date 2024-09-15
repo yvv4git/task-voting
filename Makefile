@@ -50,7 +50,7 @@ migrate-voting-reset:
 	${MIGRATE_BIN} -dir=$(MIGRATIONS_VOTING_APP) postgres $(VOTING_PG_DSN) reset
 
 run_application:
-	go run main.go -c config.toml user
+	go run main.go voting -c config.toml
 
 gen_auth_base:
 	go run main.go auth -l user1 -p secret1

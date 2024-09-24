@@ -74,6 +74,10 @@ func (v *Voting) List(ctx context.Context, r *web.ListVotingRequest) (*web.ListV
 }
 
 func (v *Voting) CreateVoting(ctx context.Context, r *web.CreateVotingRequest) (*web.CreateVotingResponse, error) {
+	if !r.StartAt.Before(r.EndAt) {
+		return nil, ErrStartAtBeforeEndAt
+	}
+
 	result, err := v.repo.CreateVoting(ctx, &repository.CreateVotingParams{
 		Name:        r.Name,
 		Description: r.Description,

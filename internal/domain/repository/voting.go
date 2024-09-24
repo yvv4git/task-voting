@@ -155,6 +155,20 @@ type ResultID struct {
 }
 
 func (v *Voting) CreateVoting(ctx context.Context, p *CreateVotingParams) (*CreateVotingResult, error) {
+	/*
+		Зачем использовать defer tx.Rollback(ctx)?
+		1. Гарантия отката транзакции.
+		2. Обработка исключений.
+		Если в процессе выполнения транзакции возникает паника (panic), defer-функция все равно будет выполнена,
+		что позволяет корректно завершить транзакцию.
+		3. Чистота кода.
+		Использование defer делает код более чистым и понятным, так как не нужно вручную откатывать транзакцию в каждом месте,
+		где может возникнуть ошибка.
+
+		Когда вы вызываете tx.Rollback(ctx) в блоке defer, это не обязательно означает, что будет выполнен запрос к базе данных.
+		Фактический запрос к БД будет выполнен только в том случае, если транзакция действительно активна и не была зафиксирована (committed).
+		Если транзакция уже была зафиксирована, вызов tx.Rollback(ctx) просто ничего не сделает.
+	*/
 	tx, err := v.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -407,7 +421,40 @@ func (v *Voting) MakeChoice(ctx context.Context, p *MakeChoiceParams) error {
 }
 
 func (v *Voting) validateBeforeMakeChoice(ctx context.Context, tx pgx.Tx, p *MakeChoiceParams) error {
+	if err := v.isFinished(ctx, tx, p); err != nil {
+		return err
+	}
+
 	return v.isUserVoted(ctx, tx, p)
+}
+
+func (v *Voting) isFinished(ctx context.Context, tx pgx.Tx, p *MakeChoiceParams) error {
+	internalBuilder := sq.Select("1").
+		From("voting_invariance i").
+		Join("voting v ON v.id = i.voting_id").
+		Where(
+			sq.And{
+				sq.Eq{"i.id": p.InvarianceID},
+				sq.Expr("v.ended_at <= current_timestamp"),
+			},
+		)
+
+	mainBuilder := internalBuilder.Prefix("SELECT EXISTS(").Suffix(") AS status")
+
+	stmt, args, err := mainBuilder.PlaceholderFormat(sq.Dollar).ToSql()
+	if err != nil {
+		return fmt.Errorf("build statement: %w", err)
+	}
+
+	status, err := infrastructure.FetchRow[СheckExistsReult](ctx, tx, stmt, args...)
+	if err != nil {
+		return err
+	}
+	if status.Status {
+		return fmt.Errorf("voting is finished")
+	}
+
+	return nil
 }
 
 func (v *Voting) isUserVoted(ctx context.Context, tx pgx.Tx, p *MakeChoiceParams) error {

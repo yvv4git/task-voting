@@ -407,7 +407,40 @@ func (v *Voting) MakeChoice(ctx context.Context, p *MakeChoiceParams) error {
 }
 
 func (v *Voting) validateBeforeMakeChoice(ctx context.Context, tx pgx.Tx, p *MakeChoiceParams) error {
+	if err := v.isFinished(ctx, tx, p); err != nil {
+		return err
+	}
+
 	return v.isUserVoted(ctx, tx, p)
+}
+
+func (v *Voting) isFinished(ctx context.Context, tx pgx.Tx, p *MakeChoiceParams) error {
+	internalBuilder := sq.Select("1").
+		From("voting_invariance i").
+		Join("voting v ON v.id = i.voting_id").
+		Where(
+			sq.And{
+				sq.Eq{"i.id": p.InvarianceID},
+				sq.Expr("v.ended_at <= current_timestamp"),
+			},
+		)
+
+	mainBuilder := internalBuilder.Prefix("SELECT EXISTS(").Suffix(") AS status")
+
+	stmt, args, err := mainBuilder.PlaceholderFormat(sq.Dollar).ToSql()
+	if err != nil {
+		return fmt.Errorf("build statement: %w", err)
+	}
+
+	status, err := infrastructure.FetchRow[СheckExistsReult](ctx, tx, stmt, args...)
+	if err != nil {
+		return err
+	}
+	if status.Status {
+		return fmt.Errorf("voting is finished")
+	}
+
+	return nil
 }
 
 func (v *Voting) isUserVoted(ctx context.Context, tx pgx.Tx, p *MakeChoiceParams) error {
